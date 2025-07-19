@@ -69,4 +69,17 @@ def plot_overlaid_gps_map(df1, df2, frame=None):
         fig.update_layout(title="Driving Line Comparison", mapbox_style="carto-darkmatter", margin={"r":0,"t":30,"l":0,"b":0})
         st.plotly_chart(fig, use_container_width=True)
 
-# Remaining functions and main logic unchanged
+# --- Main Logic ---
+if uploaded_file1 and uploaded_file2:
+    df1 = pd.read_csv(uploaded_file1)
+    df2 = pd.read_csv(uploaded_file2)
+    df1 = standardize_columns(df1)
+    df2 = standardize_columns(df2)
+
+    st.subheader("📊 You vs Comparison Lap Telemetry Overlaid")
+
+    total_frames = min(len(df1), len(df2))
+    frame = st.slider("Playback Position", min_value=0, max_value=total_frames-1, value=total_frames-1)
+
+    plot_overlaid_telemetry(df1, df2, frame)
+    plot_overlaid_gps_map(df1, df2, frame)
