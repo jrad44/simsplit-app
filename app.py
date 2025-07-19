@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 # --- Page Setup ---
 st.set_page_config(page_title="SimSplit Telemetry Analyzer", layout="wide")
@@ -46,18 +47,27 @@ def plot_gps_map(df, driver_name, frame=None):
         st.plotly_chart(fig, use_container_width=True)
 
 def detect_braking_points(df):
-    markers = df[df['Brake'] > 0.1][['LapDistPct']]
-    return markers
+    if 'Brake' in df.columns:
+        markers = df[df['Brake'] > 0.1][['LapDistPct']]
+        return markers
+    else:
+        return pd.DataFrame()
 
 def plot_comparison(merged_df, lap_name_1, lap_name_2, frame=None):
     if frame is not None:
         merged_df = merged_df.iloc[:frame+1]
-    fig = px.line(merged_df, x='LapDistPct',
-                  y=[f'Speed_{lap_name_1}', f'Speed_{lap_name_2}'],
-                  title="Speed Comparison",
-                  labels={'LapDistPct': 'Lap %'})
-    fig.update_layout(legend_title_text="Driver")
-    st.plotly_chart(fig, use_container_width=True)
+    y_cols = []
+    for metric in ['Speed']:
+        col1 = f'{metric}_{lap_name_1}'
+        col2 = f'{metric}_{lap_name_2}'
+        if col1 in merged_df.columns and col2 in merged_df.columns:
+            y_cols.extend([col1, col2])
+    if y_cols:
+        fig = px.line(merged_df, x='LapDistPct', y=y_cols,
+                      title="Speed Comparison",
+                      labels={'LapDistPct': 'Lap %'})
+        fig.update_layout(legend_title_text="Driver")
+        st.plotly_chart(fig, use_container_width=True)
 
 # --- Main Logic ---
 if uploaded_file1:
