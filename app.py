@@ -19,10 +19,20 @@ def standardize_columns(df):
     return df
 
 def plot_telemetry(df, driver_name):
-    fig = px.line(df, x='LapDistPct', y=['Speed', 'Throttle', 'Brake', 'Steering'],
-                  title=f"{driver_name} • Inputs vs. Lap %",
-                  labels={'LapDistPct': 'Lap %'})
-    st.plotly_chart(fig, use_container_width=True)
+    expected_cols = ['Speed', 'Throttle', 'Brake', 'Steering']
+    available_cols = [col for col in expected_cols if col in df.columns]
+
+    # Handle alternative column names (example: 'SteeringWheelAngle')
+    if 'SteeringWheelAngle' in df.columns and 'Steering' not in available_cols:
+        available_cols.append('SteeringWheelAngle')
+
+    if available_cols:
+        fig = px.line(df, x='LapDistPct', y=available_cols,
+                      title=f"{driver_name} • Inputs vs. Lap %",
+                      labels={'LapDistPct': 'Lap %'})
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No telemetry columns found to plot. Please check your CSV file.")
 
 def plot_gps_map(df, driver_name):
     if 'Lat' in df.columns and 'Lon' in df.columns:
