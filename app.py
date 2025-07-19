@@ -72,8 +72,12 @@ if uploaded_file1 and uploaded_file2:
     driver2 = uploaded_file2.name.replace('.csv', '')
 
     st.subheader(f"🔁 Telemetry Comparison: {driver1} vs. {driver2}")
-    merged = pd.merge(df1, df2, on='LapDistPct', suffixes=(f'_{driver1}', f'_{driver2}'))
-    plot_comparison(merged, driver1, driver2)
+
+    if 'LapDistPct' in df1.columns and 'LapDistPct' in df2.columns:
+        merged = pd.merge(df1, df2, on='LapDistPct', suffixes=(f'_{driver1}', f'_{driver2}'))
+        plot_comparison(merged, driver1, driver2)
+    else:
+        st.warning("Cannot compare laps – column 'LapDistPct' missing from one or both CSV files.")
 
     plot_gps_map(df2, driver2)
     braking_points_2 = detect_braking_points(df2)
