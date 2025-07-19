@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import json
 
 # --- Page Setup ---
 st.set_page_config(page_title="SimSplit Telemetry Analyzer", layout="wide")
@@ -19,31 +20,33 @@ def standardize_columns(df):
     df.columns = [col.strip() for col in df.columns]
     return df
 
-def plot_telemetry(df, driver_name, frame=None):
+def plot_overlaid_telemetry(df1, df2, driver1, driver2, frame=None):
     expected_cols = ['Speed', 'Throttle', 'Brake', 'Steering']
-    available_cols = [col for col in expected_cols if col in df.columns]
+    fig = px.line()
 
-    if 'SteeringWheelAngle' in df.columns and 'Steering' not in available_cols:
-        available_cols.append('SteeringWheelAngle')
+    for df, driver in zip([df1, df2], [driver1, driver2]):
+        available_cols = [col for col in expected_cols if col in df.columns]
+        if 'SteeringWheelAngle' in df.columns and 'Steering' not in available_cols:
+            available_cols.append('SteeringWheelAngle')
 
-    if frame is not None:
-        df = df.iloc[:frame+1]
-
-    if available_cols:
-        fig = px.line(df, x='LapDistPct', y=available_cols,
-                      title=f"{driver_name} • Inputs vs. Lap %",
-                      labels={'LapDistPct': 'Lap %'})
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No telemetry columns found to plot. Please check your CSV file.")
-
-def plot_gps_map(df, driver_name, frame=None):
-    if 'Lat' in df.columns and 'Lon' in df.columns:
         if frame is not None:
             df = df.iloc[:frame+1]
-        fig = px.line_mapbox(df, lat='Lat', lon='Lon', zoom=13, height=400,
-                             title=f"{driver_name} • GPS Driving Line")
-        fig.update_layout(mapbox_style="carto-darkmatter", margin={"r":0,"t":30,"l":0,"b":0})
+
+        for col in available_cols:
+            fig.add_scatter(x=df['LapDistPct'], y=df[col], mode='lines', name=f"{col} ({driver})")
+
+    fig.update_layout(title="Telemetry Inputs Comparison", xaxis_title="Lap %", yaxis_title="Value")
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_overlaid_gps_map(df1, df2, driver1, driver2, frame=None):
+    if 'Lat' in df1.columns and 'Lon' in df1.columns and 'Lat' in df2.columns and 'Lon' in df2.columns:
+        if frame is not None:
+            df1 = df1.iloc[:frame+1]
+            df2 = df2.iloc[:frame+1]
+        fig = px.line_mapbox(df1, lat='Lat', lon='Lon', zoom=13, height=400, color_discrete_sequence=["red"])
+        fig.add_trace(px.line_mapbox(df2, lat='Lat', lon='Lon').data[0])
+        fig.data[1].line.color = "blue"
+        fig.update_layout(title="Driving Line Comparison", mapbox_style="carto-darkmatter", margin={"r":0,"t":30,"l":0,"b":0})
         st.plotly_chart(fig, use_container_width=True)
 
 def detect_braking_points(df):
@@ -53,56 +56,54 @@ def detect_braking_points(df):
     else:
         return pd.DataFrame()
 
-def plot_comparison(merged_df, lap_name_1, lap_name_2, frame=None):
-    if frame is not None:
-        merged_df = merged_df.iloc[:frame+1]
-    y_cols = []
-    for metric in ['Speed']:
-        col1 = f'{metric}_{lap_name_1}'
-        col2 = f'{metric}_{lap_name_2}'
-        if col1 in merged_df.columns and col2 in merged_df.columns:
-            y_cols.extend([col1, col2])
-    if y_cols:
-        fig = px.line(merged_df, x='LapDistPct', y=y_cols,
-                      title="Speed Comparison",
-                      labels={'LapDistPct': 'Lap %'})
-        fig.update_layout(legend_title_text="Driver")
-        st.plotly_chart(fig, use_container_width=True)
+def generate_ghost_json(df1, df2, driver1, driver2):
+    frames = []
+    total_frames = min(len(df1), len(df2))
+    for i in range(total_frames):
+        frame_data = {
+            "frame": i,
+            driver1: {
+                "lat": df1.iloc[i]['Lat'] if 'Lat' in df1.columns else None,
+                "lon": df1.iloc[i]['Lon'] if 'Lon' in df1.columns else None,
+                "speed": df1.iloc[i]['Speed'] if 'Speed' in df1.columns else None
+            },
+            driver2: {
+                "lat": df2.iloc[i]['Lat'] if 'Lat' in df2.columns else None,
+                "lon": df2.iloc[i]['Lon'] if 'Lon' in df2.columns else None,
+                "speed": df2.iloc[i]['Speed'] if 'Speed' in df2.columns else None
+            }
+        }
+        frames.append(frame_data)
+    return frames
 
 # --- Main Logic ---
-if uploaded_file1:
-    df1 = pd.read_csv(uploaded_file1)
-    df1 = standardize_columns(df1)
-    driver1 = uploaded_file1.name.replace('.csv', '')
-
-    st.subheader(f"📊 {driver1} Baseline Lap Telemetry")
-    total_frames1 = len(df1)
-    frame1 = st.slider(f"Playback Position for {driver1}", min_value=0, max_value=total_frames1-1, value=total_frames1-1)
-
-    plot_telemetry(df1, driver1, frame1)
-    plot_gps_map(df1, driver1, frame1)
-
-    braking_points_1 = detect_braking_points(df1)
-    st.write(f"**{len(braking_points_1)} braking zones detected in {driver1}.**")
-
 if uploaded_file1 and uploaded_file2:
+    df1 = pd.read_csv(uploaded_file1)
     df2 = pd.read_csv(uploaded_file2)
+    df1 = standardize_columns(df1)
     df2 = standardize_columns(df2)
+    driver1 = uploaded_file1.name.replace('.csv', '')
     driver2 = uploaded_file2.name.replace('.csv', '')
 
-    st.subheader(f"🔁 Telemetry Comparison: {driver1} vs. {driver2}")
+    st.subheader(f"📊 {driver1} vs {driver2} Telemetry Overlaid")
 
-    if 'LapDistPct' in df1.columns and 'LapDistPct' in df2.columns:
-        merged = pd.merge(df1, df2, on='LapDistPct', suffixes=(f'_{driver1}', f'_{driver2}'))
-        total_frames_merged = len(merged)
-        frame_merged = st.slider("Playback Position for Comparison", min_value=0, max_value=total_frames_merged-1, value=total_frames_merged-1)
-        plot_comparison(merged, driver1, driver2, frame_merged)
-    else:
-        st.warning("Cannot compare laps – column 'LapDistPct' missing from one or both CSV files.")
+    total_frames = min(len(df1), len(df2))
+    frame = st.slider("Playback Position", min_value=0, max_value=total_frames-1, value=total_frames-1)
 
-    plot_gps_map(df2, driver2)
+    plot_overlaid_telemetry(df1, df2, driver1, driver2, frame)
+    plot_overlaid_gps_map(df1, df2, driver1, driver2, frame)
+
+    braking_points_1 = detect_braking_points(df1)
     braking_points_2 = detect_braking_points(df2)
+
+    st.write(f"**{len(braking_points_1)} braking zones detected in {driver1}.**")
     st.write(f"**{len(braking_points_2)} braking zones detected in {driver2}.**")
+
+    # JSON Export Section
+    st.subheader("⬇️ Export Ghost Replay JSON")
+    ghost_data = generate_ghost_json(df1, df2, driver1, driver2)
+    json_str = json.dumps(ghost_data)
+    st.download_button(label="Download Ghost Replay JSON", data=json_str, file_name="ghost_replay.json", mime="application/json")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; font-size: 0.9em; color: gray;'>SimSplit is built by racers, for racers. 100% free.</p>", unsafe_allow_html=True)
