@@ -9,9 +9,9 @@ st.markdown("<h1 style='text-align: center; color: #00ffcc;'>SimSplit • Advanc
 # --- File Uploads ---
 col1, col2 = st.columns(2)
 with col1:
-    uploaded_file1 = st.file_uploader("📥 Upload Baseline Lap CSV", type="csv", key="baseline")
+    uploaded_file1 = st.file_uploader("📥 Upload the Garage61 lap you want to compare your time to (CSV file only)", type="csv", key="baseline")
 with col2:
-    uploaded_file2 = st.file_uploader("📥 Upload Comparison Lap CSV", type="csv", key="comparison")
+    uploaded_file2 = st.file_uploader("📥 Upload your Garage61 lap here (CSV file only)", type="csv", key="comparison")
 
 # --- Helper Functions ---
 def standardize_columns(df):
